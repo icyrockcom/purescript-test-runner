@@ -10,60 +10,77 @@
 
 # Output:
 # Writes the test results to a results.json file in the passed-in output directory.
-# The test results are formatted according to the specifications at https://github.com/exercism/docs/blob/main/building/tooling/test-runners/interface.md
+# The test results are formatted according to the specifications at
+# https://github.com/exercism/docs/blob/main/building/tooling/test-runners/interface.md
 
 # Example:
 # ./bin/run.sh two-fer /absolute/path/to/two-fer/solution/folder/ /absolute/path/to/output/directory/
 
-# If any required arguments is missing, print the usage and exit
-if [ -z "$1" ] || [ -z "$2" ] || [ -z "$3" ]; then
+set -o pipefail
+set -u
+
+# If required arguments are missing, print the usage and exit
+if [ $# != 3 ]; then
     echo "usage: ./bin/run.sh exercise-slug /absolute/path/to/two-fer/solution/folder/ /absolute/path/to/output/directory/"
     exit 1
 fi
 
+base_dir=$(builtin cd "${BASH_SOURCE%/*}/.." || exit; pwd)
+
 slug="$1"
 input_dir="${2%/}"
 output_dir="${3%/}"
-root_dir=$(realpath $(dirname "$0")/..)
 results_file="${output_dir}/results.json"
+
+if [ ! -d "${input_dir}" ]; then
+    echo "No such directory: ${input_dir}"
+    exit 1
+fi
 
 # Create the output directory if it doesn't exist
 mkdir -p "${output_dir}"
 
-echo "${slug}: testing..."
+pushd "${input_dir}" > /dev/null || exit
 
-pushd "${input_dir}" > /dev/null
+echo "Build and test ${slug}..."
 
-ln -s "${root_dir}/node_modules"
-ln -s "${root_dir}/bower_components"
-cp -r "${root_dir}/output" . # We can't symlink this as pulp needs to write to it
+ln -sfn "${base_dir}/pre-compiled/node_modules" .
+ln -sfn "${base_dir}/pre-compiled/.spago" .
+
+# We can't symlink this as spago will write the compiled modules in the
+# `ouput/` directory. The timestamps of the `output/` directory must be
+# preserved or else PureScript compiler (`purs`) will invalidate the cache and
+# force a rebuild defeating pre-compiling altogether (and thus the usage of the
+# `cp` `-p` flag).
+#
+# Note that under Docker `output/` should be mounted in a tmpfs to avoid
+# copying between the docker host and client giving a nice speed boost.
+cp -R -p "${base_dir}/pre-compiled/output" .
 
 # Run the tests for the provided implementation file and redirect stdout and
-# stderr to capture it
-test_output=$(pulp test 2>&1)
+# stderr to capture it. We do our best to minimize the output to emit and
+# compiler errors or unit test output as this scrubbed and presented to the
+# student. In addition spago will try to write to ~/cache/.spago and will fail
+# on a read-only mount and thus we skip the global cache and request to not
+# install packages.
+export XDG_CACHE_HOME=/tmp
+spago_output=$(npx spago -V --global-cache skip --no-psa test --no-install 2>&1)
 exit_code=$?
 
-popd > /dev/null
+popd > /dev/null || exit
 
-# Write the results.json file based on the exit code of the command that was 
-# just executed that tested the implementation file
+# Write the results.json file based on the exit code of the command that was
+# just executed that tested the implementation file.
 if [ $exit_code -eq 0 ]; then
-    jq -n '{version: 1, status: "pass"}' > ${results_file}
+    jq -n '{version: 1, status: "pass"}' > "${results_file}"
 else
-    # Sanitize the output
-    sanitized_test_output=$(echo "${test_output}" | sed -E \
-      -e '/^\* Building project/d' \
+    echo "${spago_output}"
+    sanitized_spago_output=$(echo "${spago_output}" | sed -E \
       -e '/^Compiling/d' \
-      -e '/at .*(node:internal|.*\/opt\/test-runner\/.*\.js)/d')
+      -e '/at.*:[[:digit:]]+:[[:digit:]]+\)?/d')
 
-    # Manually add colors to the output to help scanning the output for errors
-    colorized_test_output=$(echo "${sanitized_test_output}" | \
-        GREP_COLOR='01;31' grep --color=always -E -e '(Error found:|Error:|\* ERROR:|.*Failed:).*$|$' | \
-        GREP_COLOR='01;32' grep --color=always -E -e '.*Passed:.*$|$')
-
-    printf "${colorized_test_output}"
-
-    jq -n --arg output "${colorized_test_output}" '{version: 1, status: "fail", output: $output}' > ${results_file}
+    jq --null-input --arg output "${sanitized_spago_output}" \
+        '{version: 1, status: "fail", output: $output}' > "${results_file}"
 fi
 
-echo "${slug}: done"
+echo "Done"

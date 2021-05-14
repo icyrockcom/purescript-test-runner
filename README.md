@@ -15,3 +15,8 @@ To run a solution's test in the Docker container, do the following:
 
 [test-runner-interface]: https://github.com/exercism/automated-tests/blob/master/docs/interface.md
 [web-exercism]: https://exercism.io/
+
+
+## 
+
+- Spago global cache

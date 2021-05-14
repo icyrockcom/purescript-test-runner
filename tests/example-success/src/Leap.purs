@@ -2,6 +2,7 @@ module Leap where
 
 import Prelude
 
+-- foo
 isLeapYear :: Int -> Boolean
 isLeapYear year =
   mod year 4 == 0 &&
