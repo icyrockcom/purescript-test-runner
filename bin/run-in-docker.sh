@@ -45,4 +45,5 @@ docker run \
     --mount type=tmpfs,destination=/solution/output \
     --mount type=bind,source="${output_dir}",destination=/output \
     --mount type=tmpfs,destination=/tmp \
-    exercism/test-runner "${slug}" /solution /output
+    --entrypoint /bin/bash -it \
+    exercism/test-runner # "${slug}" /solution /output

@@ -45,7 +45,7 @@ pushd "${input_dir}" > /dev/null || exit
 echo "Build and test ${slug}..."
 
 ln -sfn "${base_dir}/pre-compiled/node_modules" .
-ln -sfn "${base_dir}/pre-compiled/.spago" .
+#ln -sfn "${base_dir}/pre-compiled/.spago" .
 
 # We can't symlink this as spago will write the compiled modules in the
 # `ouput/` directory. The timestamps of the `output/` directory must be
@@ -55,7 +55,13 @@ ln -sfn "${base_dir}/pre-compiled/.spago" .
 #
 # Note that under Docker `output/` should be mounted in a tmpfs to avoid
 # copying between the docker host and client giving a nice speed boost.
+cp -R -p "${base_dir}/pre-compiled/.spago" .
 cp -R -p "${base_dir}/pre-compiled/output" .
+
+# Copy cache to make it writable (dhall)
+mkdir -p "${output_dir}/.cache"
+cp -R /root/.cache/dhall "${output_dir}/.cache"
+cp -R /root/.cache/dhall-haskell "${output_dir}/.cache"
 
 # Run the tests for the provided implementation file and redirect stdout and
 # stderr to capture it. We do our best to minimize the output to emit and
@@ -63,8 +69,11 @@ cp -R -p "${base_dir}/pre-compiled/output" .
 # student. In addition spago will try to write to ~/cache/.spago and will fail
 # on a read-only mount and thus we skip the global cache and request to not
 # install packages.
-export XDG_CACHE_HOME=/tmp
-spago_output=$(npx spago -V --global-cache skip --no-psa test --no-install 2>&1)
+export XDG_CACHE_HOME"=${output_dir}/.cache"
+# npx spago -V --global-cache skip --no-psa build -n
+# exit
+
+spago_output=$(npx spago --quiet --global-cache skip --no-psa test --no-install 2>&1)
 exit_code=$?
 
 popd > /dev/null || exit
@@ -74,7 +83,6 @@ popd > /dev/null || exit
 if [ $exit_code -eq 0 ]; then
     jq -n '{version: 1, status: "pass"}' > "${results_file}"
 else
-    echo "${spago_output}"
     sanitized_spago_output=$(echo "${spago_output}" | sed -E \
       -e '/^Compiling/d' \
       -e '/at.*:[[:digit:]]+:[[:digit:]]+\)?/d')
