@@ -25,12 +25,17 @@ if [ $# != 3 ]; then
     exit 1
 fi
 
+# Establish the base directory so we can build fully-qualified directories.
 base_dir=$(builtin cd "${BASH_SOURCE%/*}/.." || exit; pwd)
 
-slug="$1"
-input_dir="${2%/}"
-output_dir="${3%/}"
+slug=${1}
+input_dir=${2}
+output_dir=${3}
 results_file="${output_dir}/results.json"
+
+# Under Docker the build directory is mounted as a read-write tmpfs so that:
+# - We can work with a write-able file-system
+# - We avoid copying files between the docker host and client giving a nice speedup.
 build_dir=/tmp/build
 cache_dir=${build_dir}/cache
 
@@ -48,19 +53,30 @@ if [ -d "${build_dir}" ]; then
 fi
 
 mkdir -p ${build_dir}
-mkdir -p ${cache_dir}
-cp "${input_dir}"/*.dhall ${build_dir}
-cp -R -p "${base_dir}/pre-compiled/.spago" ${build_dir}
-cp -R -p "${base_dir}/pre-compiled/output" ${build_dir}
-ln -sfn "${base_dir}/pre-compiled/node_modules" ${build_dir}
-ln -s "${input_dir}"/src ${build_dir}/src
-ln -s "${input_dir}"/test ${build_dir}/test
+pushd "${build_dir}" > /dev/null || exit
+
+# Put the basic spago project in place
+cp "${input_dir}"/*.dhall .
+ln -s "${input_dir}"/src .
+ln -s "${input_dir}"/test .
+
+# Setup cache directory. We require a writable dhall cache because dhall will
+# attempt to fetch the upstream package-set definition.
+mkdir ${cache_dir}
 cp -R "${HOME}"/.cache/dhall ${cache_dir}
 cp -R "${HOME}"/.cache/dhall-haskell ${cache_dir}
 
-pushd "${build_dir}" > /dev/null || exit
+# Setup our prepared node setup.
+ln -s "${base_dir}/pre-compiled/node_modules" .
 
-echo "Build and test ${slug}..."
+# The timestamps of the `output/` directory must be preserved or else
+# PureScript compiler (`purs`) will invalidate the cache and force a rebuild
+# defeating pre-compiling altogether (and thus the usage of the `cp` `-p`
+# flag).
+cp -R -p "${base_dir}/pre-compiled/output" .
+cp -R "${base_dir}/pre-compiled/.spago" .
+
+echo "Build and test ${slug} in ${build_dir}..."
 
 # Run the tests for the provided implementation file and redirect stdout and
 # stderr to capture it. We do our best to minimize the output to emit and
@@ -69,7 +85,7 @@ echo "Build and test ${slug}..."
 # on a read-only mount and thus we skip the global cache and request to not
 # install packages.
 export XDG_CACHE_HOME=${cache_dir}
-spago_output=$(npx spago --quiet --global-cache skip --no-psa test --no-install 2>&1)
+spago_output=$(npx spago --global-cache skip --no-psa test --no-install 2>&1)
 exit_code=$?
 
 popd > /dev/null || exit

@@ -26,9 +26,9 @@ if [ $# != 3 ]; then
     exit 1
 fi
 
-slug="$1"
-input_dir="${2%/}"
-output_dir="${3%/}"
+slug=${1}
+input_dir=${2}
+output_dir=${3}
 
 # Create the output directory if it doesn't exist
 mkdir -p "${output_dir}"

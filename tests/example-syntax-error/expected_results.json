@@ -1,5 +1,5 @@
 {
   "version": 1,
   "status": "fail",
-  "output": "Error found:\n\n  Unable to parse module:\n  Unexpected token '!@!@#'\n\n\nSee https://github.com/purescript/documentation/blob/master/errors/ErrorParsingModule.md for more information,\nor to contribute content related to this error."
+  "output": "Error found:\n\n  Unable to parse module:\n  Unexpected token '!@!@#'\n\n\nSee https://github.com/purescript/documentation/blob/master/errors/ErrorParsingModule.md for more information,\nor to contribute content related to this error.\n\n\n[error] Failed to build."
 }
