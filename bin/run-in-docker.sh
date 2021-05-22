@@ -17,7 +17,6 @@
 # Example:
 # ./bin/run-in-docker.sh two-fer /absolute/path/to/two-fer/solution/folder/ /absolute/path/to/output/directory/
 
-set -e
 set -o pipefail
 set -u
 
@@ -42,8 +41,6 @@ docker run \
     --read-only \
     --network none \
     --mount type=bind,source="${input_dir}",destination=/solution \
-    --mount type=tmpfs,destination=/solution/output \
     --mount type=bind,source="${output_dir}",destination=/output \
     --mount type=tmpfs,destination=/tmp \
-    --entrypoint /bin/bash -it \
-    exercism/test-runner # "${slug}" /solution /output
+    exercism/test-runner "${slug}" /solution /output

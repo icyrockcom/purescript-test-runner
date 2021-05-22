@@ -31,6 +31,8 @@ slug="$1"
 input_dir="${2%/}"
 output_dir="${3%/}"
 results_file="${output_dir}/results.json"
+build_dir=/tmp/build
+cache_dir=${build_dir}/cache
 
 if [ ! -d "${input_dir}" ]; then
     echo "No such directory: ${input_dir}"
@@ -40,28 +42,25 @@ fi
 # Create the output directory if it doesn't exist
 mkdir -p "${output_dir}"
 
-pushd "${input_dir}" > /dev/null || exit
+# Prepare build directory
+if [ -d "${build_dir}" ]; then
+    rm -rf ${build_dir}
+fi
+
+mkdir -p ${build_dir}
+mkdir -p ${cache_dir}
+cp "${input_dir}"/*.dhall ${build_dir}
+cp -R -p "${base_dir}/pre-compiled/.spago" ${build_dir}
+cp -R -p "${base_dir}/pre-compiled/output" ${build_dir}
+ln -sfn "${base_dir}/pre-compiled/node_modules" ${build_dir}
+ln -s "${input_dir}"/src ${build_dir}/src
+ln -s "${input_dir}"/test ${build_dir}/test
+cp -R "${HOME}"/.cache/dhall ${cache_dir}
+cp -R "${HOME}"/.cache/dhall-haskell ${cache_dir}
+
+pushd "${build_dir}" > /dev/null || exit
 
 echo "Build and test ${slug}..."
-
-ln -sfn "${base_dir}/pre-compiled/node_modules" .
-#ln -sfn "${base_dir}/pre-compiled/.spago" .
-
-# We can't symlink this as spago will write the compiled modules in the
-# `ouput/` directory. The timestamps of the `output/` directory must be
-# preserved or else PureScript compiler (`purs`) will invalidate the cache and
-# force a rebuild defeating pre-compiling altogether (and thus the usage of the
-# `cp` `-p` flag).
-#
-# Note that under Docker `output/` should be mounted in a tmpfs to avoid
-# copying between the docker host and client giving a nice speed boost.
-cp -R -p "${base_dir}/pre-compiled/.spago" .
-cp -R -p "${base_dir}/pre-compiled/output" .
-
-# Copy cache to make it writable (dhall)
-mkdir -p "${output_dir}/.cache"
-cp -R /root/.cache/dhall "${output_dir}/.cache"
-cp -R /root/.cache/dhall-haskell "${output_dir}/.cache"
 
 # Run the tests for the provided implementation file and redirect stdout and
 # stderr to capture it. We do our best to minimize the output to emit and
@@ -69,10 +68,7 @@ cp -R /root/.cache/dhall-haskell "${output_dir}/.cache"
 # student. In addition spago will try to write to ~/cache/.spago and will fail
 # on a read-only mount and thus we skip the global cache and request to not
 # install packages.
-export XDG_CACHE_HOME"=${output_dir}/.cache"
-# npx spago -V --global-cache skip --no-psa build -n
-# exit
-
+export XDG_CACHE_HOME=${cache_dir}
 spago_output=$(npx spago --quiet --global-cache skip --no-psa test --no-install 2>&1)
 exit_code=$?
 

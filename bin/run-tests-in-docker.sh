@@ -12,7 +12,6 @@
 # Example:
 # ./bin/run-tests-in-docker.sh
 
-set -e
 set -o pipefail
 set -u
 

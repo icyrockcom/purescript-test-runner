@@ -16,8 +16,10 @@ set -u
 
 exit_code=0
 
+base_dir=$(builtin cd "${BASH_SOURCE%/*}/.." || exit; pwd)
+
 # Iterate over all test Spago projects
-for config in ./tests/*/spago.dhall; do
+for config in "${base_dir}"/tests/*/spago.dhall; do
     exercise_dir=$(dirname "${config}")
     slug=$(basename "${exercise_dir}")
     expected_results_file="${exercise_dir}/expected_results.json"
